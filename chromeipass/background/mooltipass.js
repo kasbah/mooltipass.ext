@@ -6,8 +6,8 @@ var connected = null;
 var mpInputCallback = null;
 var mpUpdateCallback = null;
 
-mooltipass.latestChromeipassVersionUrl = 'https://raw.githubusercontent.com/limpkin/mooltipass/master/chromeipass/manifest.json';
-mooltipass.latestClientVersionUrl = 'https://raw.githubusercontent.com/limpkin/mooltipass/master/chrome.hid-app/manifest.json';
+mooltipass.latestChromeipassVersionUrl = 'https://raw.githubusercontent.com/limpkin/mooltipass/master/authentication_clients/chromeipass.ext/manifest.json';
+mooltipass.latestClientVersionUrl = 'https://raw.githubusercontent.com/limpkin/mooltipass/master/authentication_clients/chrome.hid-app/manifest.json';
 mooltipass.latestChromeipass = (typeof(localStorage.latestChromeipass) == 'undefined') ? 
                                 {"version": 0, "versionParsed": 0, "lastChecked": null} :
                                 JSON.parse(localStorage.latestChromeipass);
