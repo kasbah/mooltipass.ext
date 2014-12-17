@@ -508,7 +508,7 @@ cipForm.setInputFields = function(form, credentialFields) {
 	form.data("cipPassword", credentialFields.password);
 }
 
-cipForm.onSubmit = function() {
+cipForm.onSubmit = function(event) {
 	var usernameId = cIPJQ(this).data("cipUsername");
 	var passwordId = cIPJQ(this).data("cipPassword");
 
@@ -520,12 +520,15 @@ cipForm.onSubmit = function() {
 
 	if(usernameField) {
 		usernameValue = usernameField.val();
+        console.log('submit: username "'+usernameValue);
 	}
 	if(passwordField) {
 		passwordValue = passwordField.val();
+        console.log('submit: password');
 	}
 
-	cip.rememberCredentials(usernameValue, passwordValue);
+
+	cip.rememberCredentials(event, usernameField, usernameValue, passwordField, passwordValue);
 };
 
 
@@ -933,7 +936,7 @@ cipFields.getCombination = function(givenType, fieldId) {
 	}
 
 	if(combination.username) {
-		if(cip.credentials.length > 0) {
+		if(cip.credentials.length > 1) {
 			cip.preparePageForMultipleCredentials(cip.credentials);
 		}
 	}
@@ -1136,6 +1139,8 @@ cip.submitUrl = null;
 // received credentials from KeePassHTTP
 cip.credentials = [];
 
+cip.trapSubmit = true;
+
 cIPJQ(function() {
 	cip.init();
 });
@@ -1193,6 +1198,32 @@ cip.initPasswordGenerator = function(inputs) {
 	}
 }
 
+/**
+ * Submit the credentials to the server
+ */
+cip.doSubmit = function doSubmit(pass)
+{
+    cip.trapSubmit = false; // don't trap this submit, let it through
+
+    console.log('doSubmit: pass field',pass);
+
+    // locate best submit option
+    var forms = $(pass).closest('form');
+    if (forms.length > 0) {
+        var submits = forms.find(':submit');
+        if (submits.length > 0) {
+            console.log('submitting form '+forms[0].id+' via ',submits[0]);
+            $(submits[0]).click();
+        } else {
+            console.log('submitting form '+forms[0].id);
+            $(forms[0]).submit();
+        }
+    } else {
+        console.log('submitting default form '+$('form').id);
+        $('form').submit();
+    }
+}
+
 cip.retrieveCredentialsCallback = function (credentials, dontAutoFillIn) {
 	if (cipFields.combinations.length > 0) {
 		cip.u = _f(cipFields.combinations[0].username);
@@ -1202,44 +1233,35 @@ cip.retrieveCredentialsCallback = function (credentials, dontAutoFillIn) {
 	if (credentials.length > 0) {
 		cip.credentials = credentials;
 		cip.prepareFieldsForCredentials(!Boolean(dontAutoFillIn));
+        if (cip.p) {
+            cip.doSubmit(cip.p);
+        }
 	}
 }
 
 cip.prepareFieldsForCredentials = function(autoFillInForSingle) {
-	// only one login for this site
-	if (autoFillInForSingle && cip.settings.autoFillSingleEntry && cip.credentials.length == 1) {
-		var combination = null;
-		if(!cip.p && !cip.u && cipFields.combinations.length > 0) {
-			cip.u = _f(cipFields.combinations[0].username);
-			cip.p = _f(cipFields.combinations[0].password);
-			combination = cipFields.combinations[0];
-		}
-		if (cip.u) {
-			cip.u.val(cip.credentials[0].Login);
-			combination = cipFields.getCombination("username", cip.u);
-		}
-		if (cip.p) {
-			cip.p.val(cip.credentials[0].Password);
-			combination = cipFields.getCombination("password", cip.p);
-		}
+	// only one login returned by mooltipass
+    var combination = null;
+    if(!cip.p && !cip.u && cipFields.combinations.length > 0) {
+        cip.u = _f(cipFields.combinations[0].username);
+        cip.p = _f(cipFields.combinations[0].password);
+        combination = cipFields.combinations[0];
+    }
+    if (cip.u) {
+        cip.u.val(cip.credentials[0].Login);
+        combination = cipFields.getCombination("username", cip.u);
+    }
+    if (cip.p) {
+        cip.p.val(cip.credentials[0].Password);
+        combination = cipFields.getCombination("password", cip.p);
+    }
 
-		if(combination) {
-			var list = {};
-			if(cip.fillInStringFields(combination.fields, cip.credentials[0].StringFields, list)) {
-				cipForm.destroy(false, {"password": list.list[0], "username": list.list[1]});
-			}
-		}
-
-		// generate popup-list of usernames + descriptions
-		chrome.extension.sendMessage({
-			'action': 'popup_login',
-			'args': [[cip.credentials[0].Login + " (" + cip.credentials[0].Name + ")"]]
-		});
-	}
-	//multiple logins for this site
-	else if (cip.credentials.length > 1 || (cip.credentials.length > 0 && (!cip.settings.autoFillSingleEntry || !autoFillInForSingle))) {
-		cip.preparePageForMultipleCredentials(cip.credentials);
-	}
+    if(combination) {
+        var list = {};
+        if(cip.fillInStringFields(combination.fields, cip.credentials[0].StringFields, list)) {
+            cipForm.destroy(false, {"password": list.list[0], "username": list.list[1]});
+        }
+    }
 }
 
 cip.preparePageForMultipleCredentials = function(credentials) {
@@ -1607,20 +1629,29 @@ cip.contextMenuRememberCredentials = function() {
 		passwordValue = passwordField.val();
 	}
 
-	if(!cip.rememberCredentials(usernameValue, passwordValue)) {
+	if(!cip.rememberCredentials(null, usernameField, usernameValue, passwordField, passwordValue)) {
 		alert("Could not detect changed credentials.");
 	}
 };
 
-cip.rememberCredentials = function(usernameValue, passwordValue) {
+
+cip.rememberCredentials = function(event, usernameField, usernameValue, passwordField, passwordValue) {
+    console.log('rememberCredentials()');
 	// no password given or field cleaned by a site-running script
 	// --> no password to save
 	if(passwordValue == "") {
+        console.log('rememberCredentials() no password value');
 		return false;
 	}
 
-	var usernameExists = false;
+    if (!cip.trapSubmit) {
+        console.log('rememberCredentials() trap disabled');
+        cip.trapSubmit = true;
+        return false;
+    }
 
+
+	var usernameExists = false;
 	var nothingChanged = false;
 	for(var i = 0; i < cip.credentials.length; i++) {
 		if(cip.credentials[i].Login == usernameValue && cip.credentials[i].Password == passwordValue) {
@@ -1662,13 +1693,28 @@ cip.rememberCredentials = function(usernameValue, passwordValue) {
 			}
 		}
 
-		chrome.extension.sendMessage({
-			'action': 'set_remember_credentials',
-			'args': [usernameValue, passwordValue, url, usernameExists, credentialsList]
-		});
+        switch (cip.settings.updateMethod) {
+        case 'chromeipass':
+            console.log('rememberCredentials - sending set_remember_credentials');
+            chrome.extension.sendMessage({
+                'action': 'set_remember_credentials',
+                'args': [usernameValue, passwordValue, url, usernameExists, credentialsList]
+            });
+            break;
+        case 'popup':
+        case 'notification':
+            console.log('rememberCredentials - sending update_notify');
+            chrome.extension.sendMessage({
+                'action': 'update_notify',
+                'args': [usernameValue, passwordValue, url, usernameExists, credentialsList]
+            });
+            break;
+        }
 
 		return true;
-	}
+	} else {
+        console.log('rememberCredentials - nothing changed');
+    }
 
 	return false;
 };

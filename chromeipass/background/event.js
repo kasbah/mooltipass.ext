@@ -1,14 +1,13 @@
 var event = {};
 
-
 event.onMessage = function(request, sender, callback) {
 	if (request.action in event.messageHandlers) {
-		//console.log("onMessage(" + request.action + ") for #" + sender.tab.id);
 
 		if(!sender.hasOwnProperty('tab') || sender.tab.id < 1) {
 			sender.tab = {};
 			sender.tab.id = page.currentTabId;
 		}
+		console.log("onMessage(" + request.action + ") for #" + sender.tab.id);
 
 		event.invoke(event.messageHandlers[request.action], callback, sender.tab.id, request.args);
 
@@ -44,6 +43,11 @@ event.invoke = function(handler, callback, senderTabId, args, secondTime) {
 	page.removePageInformationFromNotExistingTabs();
 
 	chrome.tabs.get(senderTabId, function(tab) {
+        if (chrome.runtime.lastError) {
+            console.log('failed to invoke function for tab: '+chrome.runtime.lastError);
+            return;
+        }
+
 	//chrome.tabs.query({"active": true, "windowId": chrome.windows.WINDOW_ID_CURRENT}, function(tabs) {
 		//if (tabs.length === 0)
 		//	return; // For example: only the background devtools or a popup are opened
@@ -89,16 +93,12 @@ event.onShowAlert = function(callback, tab, message) {
 
 event.onLoadSettings = function(callback, tab) {
 	page.settings = (typeof(localStorage.settings) == 'undefined') ? {} : JSON.parse(localStorage.settings);
+    mooltipass.loadSettings();
+    //console.log('onLoadSettings: page.settings = ', page.settings);
 }
 
 event.onLoadKeyRing = function(callback, tab) {
-	keepass.keyRing = (typeof(localStorage.keyRing) == 'undefined') ? {} : JSON.parse(localStorage.keyRing);
-	if(keepass.isAssociated() && !keepass.keyRing[keepass.associated.hash]) {
-		keepass.associated = {
-			"value": false,
-			"hash": null
-		};
-	}
+    console.log('event.onLoadKeyRing()');
 }
 
 event.onGetSettings = function(callback, tab) {
@@ -112,23 +112,18 @@ event.onSaveSettings = function(callback, tab, settings) {
 }
 
 event.onGetStatus = function(callback, tab) {
-	keepass.testAssociation(tab);
-
-	var configured = keepass.isConfigured();
-	var keyId = null;
-	if (configured) {
-		keyId = keepass.keyRing[keepass.databaseHash].id;
-	}
+    console.log('event.onGetStatus()');
 
 	browserAction.showDefault(null, tab);
+    page.tabs[tab.id].errorMessage = undefined;  // XXX debug
 
 	callback({
-		identifier: keyId,
-		configured: configured,
-		databaseClosed: keepass.isDatabaseClosed,
-		keePassHttpAvailable: keepass.isKeePassHttpAvailable,
-		encryptionKeyUnrecognized: keepass.isEncryptionKeyUnrecognized,
-		associated: keepass.isAssociated(),
+		identifier: 'my_mp_key',
+		configured: true,
+		databaseClosed: false,
+		keePassHttpAvailable: true,
+		encryptionKeyUnrecognized: false,
+		associated: mooltipass.isConnected(),
 		error: page.tabs[tab.id].errorMessage
 	});
 }
@@ -145,26 +140,48 @@ event.onGetTabInformation = function(callback, tab) {
 }
 
 event.onGetConnectedDatabase = function(callback, tab) {
+    console.log('event.onGetConnectedDatabase()');
 	callback({
-		"count": Object.keys(keepass.keyRing).length,
-		"identifier": (keepass.keyRing[keepass.associated.hash]) ? keepass.keyRing[keepass.associated.hash].id : null
+		"count": 10,
+		"identifier": 'my_mp_db_id'
 	});
 }
 
 event.onGetKeePassHttpVersions = function(callback, tab) {
-	if(keepass.currentKeePassHttp.version == 0) {
-		keepass.getDatabaseHash(tab);
-	}
-	callback({"current": keepass.currentKeePassHttp.version, "latest": keepass.latestKeePassHttp.version});
+    console.log('event.onGetKeePassHttpVersions()');
+	callback({"current": '0.1', "latest": '0.1'});
+}
+
+event.onGetMooltipassVersions = function(callback, tab) {
+	var resp ={ 'currentFirmware': mooltipass.getFirmwareVersion(),
+               'latestFirmware': '0.5',
+	           'currentClient': mooltipass.getClientVersion(),
+               'latestClient': mooltipass.latestClient.version, 
+	           'currentChromeipass': mooltipass.currentChromeipass.version,
+               'latestChromeipass': mooltipass.latestChromeipass.version};
+    console.log('versions:',resp);
+	callback(resp);
 }
 
 event.onCheckUpdateKeePassHttp = function(callback, tab) {
-	keepass.checkForNewKeePassHttpVersion();
-	callback({"current": keepass.currentKeePassHttp.version, "latest": keepass.latestKeePassHttp.version});
+    console.log('event.onCheckUpdateKeePassHttp()');
+    mooltipass.getLatestChromeipassVersion();
+    console.log('currentChromeipass '+mooltipass.currentChromeipass.version+', latestChromeipass '+mooltipass.latestChromeipass.version);
+	callback({"current": mooltipass.currentKeePassHttp.version, "latest": mooltipass.latestKeePassHttp.version});
 }
 
-event.onUpdateAvailableKeePassHttp = function(callback, tab) {
-	callback(keepass.keePassHttpUpdateAvailable());
+event.onChromeipassUpdateAvailable = function(callback, tab) {
+    console.log('event.onChromeipassUpdateAvailable()');
+    mooltipass.getLatestChromeipassVersion();
+    console.log('currentChromeipass '+mooltipass.currentChromeipass.version+', latestChromeipass '+mooltipass.latestChromeipass.version);
+	return (mooltipass.currentChromeipass.versionParsed > 0 && mooltipass.currentChromeipass.versionParsed < mooltipass.latestChromeipass.versionParsed);
+}
+
+event.onClientUpdateAvailable = function(callback, tab) {
+    mooltipass.getLatestClientVersion();
+    mooltipass.getClientVersion();
+    console.log('currentClient '+mooltipass.currentClient.version+', latestClient '+mooltipass.latestClient.version);
+	return (mooltipass.currentClient.versionParsed > 0 && mooltipass.currentClient.versionParsed < mooltipass.latestClient.versionParsed);
 }
 
 event.onRemoveCredentialsFromTabInformation = function(callback, tab) {
@@ -173,8 +190,65 @@ event.onRemoveCredentialsFromTabInformation = function(callback, tab) {
 	page.clearCredentials(id);
 }
 
+event.onNotifyButtonClick = function(id, buttonIndex) {
+    console.log('notification',id,'button',buttonIndex,'clicked');
+    if (buttonIndex == 0) {
+        // Update
+        console.log('notification update',event.mpUpdate[id].username,'on',event.mpUpdate[id].url);
+        mooltipass.updateCredentials(null, 
+                    event.mpUpdate[id].tab, 0,
+                    event.mpUpdate[id].username,
+                    event.mpUpdate[id].password,
+                    event.mpUpdate[id].url);
+    } else {
+        // Blacklist
+        console.log('notification blacklist ',event.mpUpdate[id].url);
+        mooltipass.blacklistUrl(event.mpUpdate[id].url);
+    }
+    delete event.mpUpdate[id];
+}
+
+event.onNotifyClosed = function(id) {
+    delete event.mpUpdate[id];
+}
+
+chrome.notifications.onButtonClicked.addListener(event.onNotifyButtonClick);
+chrome.notifications.onClosed.addListener(event.onNotifyClosed);
+
+event.notificationCount = 0;
+event.mpUpdate = {};
+
 event.onSetRememberPopup = function(callback, tab, username, password, url, usernameExists, credentialsList) {
 	browserAction.setRememberPopup(tab.id, username, password, url, usernameExists, credentialsList);
+}
+
+event.onUpdateNotify = function(callback, tab, username, password, url, usernameExists, credentialsList) {
+    var updateString = usernameExists ?  'Update credentials for ' : 'Add credentials for ';
+
+    if (mooltipass.isBlacklisted(url)) {
+        console.log('notify: ignoring blacklisted url',url);
+        return;
+    }
+
+    event.notificationCount++;
+
+    var noteId = 'mpUpdate.'+event.notificationCount.toString();
+
+    event.mpUpdate[noteId] = { tab: tab, username: username, password: password, url: url };
+
+    chrome.notifications.create(noteId,
+            {   type: 'basic',
+                title: 'Mooltipass Update',
+                message: updateString+'\n'+url+'\non Mooltipass?',
+                iconUrl: '/icons/mooltipass-active.png',
+                buttons: [ {title: 'Yes'}, {title: 'Never for this site'}] },
+                function(id) {
+                    console.log('notification created for',id);
+                });
+}
+
+event.onUpdate = function(callback, tab, username, password, url, usernameExists, credentialsList) {
+    mooltipass.updateCredentials(callback, tab, 0, username, password, url);
 }
 
 event.onLoginPopup = function(callback, tab, logins) {
@@ -217,12 +291,15 @@ event.onMultipleFieldsPopup = function(callback, tab) {
 
 // all methods named in this object have to be declared BEFORE this!
 event.messageHandlers = {
-	'add_credentials': keepass.addCredentials,
+	'update': event.onUpdate,
+	'add_credentials': mooltipass.addCredentials,
+	'blacklistUrl': mooltipass.blacklistUrl,
 	'alert': event.onShowAlert,
-	'associate': keepass.associate,
+	'associate': mooltipass.associate,
 	'check_update_keepasshttp': event.onCheckUpdateKeePassHttp,
 	'get_connected_database': event.onGetConnectedDatabase,
 	'get_keepasshttp_versions': event.onGetKeePassHttpVersions,
+	'get_mooltipass_versions': event.onGetMooltipassVersions,
 	'get_settings': event.onGetSettings,
 	'get_status': event.onGetStatus,
 	'get_tab_information': event.onGetTabInformation,
@@ -232,13 +309,15 @@ event.messageHandlers = {
 	'popup_login': event.onLoginPopup,
 	'popup_multiple-fields': event.onMultipleFieldsPopup,
 	'remove_credentials_from_tab_information': event.onRemoveCredentialsFromTabInformation,
-	'retrieve_credentials': keepass.retrieveCredentials,
+	'retrieve_credentials': mooltipass.retrieveCredentials,
 	'show_default_browseraction': browserAction.showDefault,
-	'update_credentials': keepass.updateCredentials,
+	'update_credentials': mooltipass.updateCredentials,
 	'save_settings': event.onSaveSettings,
 	'set_remember_credentials': event.onSetRememberPopup,
+	'update_notify': event.onUpdateNotify,
 	'stack_add': browserAction.stackAdd,
-	'update_available_keepasshttp': event.onUpdateAvailableKeePassHttp,
-	'generate_password': keepass.generatePassword,
-	'copy_password': keepass.copyPassword
+	'update_available_chromeipass': event.onChromeipassUpdateAvailable,
+	'update_available_client': event.onClientUpdateAvailable,
+	'generate_password': mooltipass.generatePassword,
+	'copy_password': mooltipass.copyPassword
 };

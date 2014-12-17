@@ -24,6 +24,9 @@ page.initSettings = function() {
 	if(!("autoFillSingleEntry" in page.settings)) {
 		page.settings.autoFillSingleEntry = 1;
 	}
+	if(!("useUpdatePopup" in page.settings)) {
+		page.settings.useUpdatePopup = true;
+	}
 	if(!("hostname" in page.settings)) {
 		page.settings.hostname = "localhost";
 	}
@@ -119,7 +122,8 @@ page.sprintf = function(input, args) {
 
 page.debugDummy = function() {};
 
-page.debug = page.debugDummy;
+//page.debug = page.debugDummy;
+page.debug = page.debugConsole;
 
 page.setDebug = function(bool) {
 	if(bool) {

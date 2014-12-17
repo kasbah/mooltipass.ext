@@ -5,7 +5,8 @@ if(cIPJQ) {
 $(function() {
 	options.initMenu();
 	options.initGeneralSettings();
-	options.initConnectedDatabases();
+    options.initMooltipassSettings();
+    options.initBlacklist();
 	options.initSpecifiedCredentialFields();
 	options.initAbout();
 });
@@ -57,152 +58,94 @@ options.initGeneralSettings = function() {
         });
 	});
 
-	chrome.extension.sendMessage({
-		action: "get_keepasshttp_versions"
-	}, options.showKeePassHttpVersions);
+	chrome.extension.sendMessage({ action: 'get_mooltipass_versions' }, options.showMooltipassVersions);
 
 	$("#tab-general-settings button.checkUpdateKeePassHttp:first").click(function(e) {
 		e.preventDefault();
 		$(this).attr("disabled", true);
 		chrome.extension.sendMessage({
-			action: "check_update_keepasshttp"
-		}, options.showKeePassHttpVersions);
-	});
-
-
-	$("#showDangerousSettings").click(function() {
-		$("#dangerousSettings").show();
-		$(this).hide();
-	});
-
-	$("#hostname").val(options.settings["hostname"]);
-	$("#port").val(options.settings["port"]);
-
-	$("#portButton").click(function() {
-		var port = $.trim($("#port").val());
-		var portNumber = parseInt(port);
-		if(isNaN(port) || portNumber < 1025 || portNumber > 99999) {
-			$("#port").closest(".control-group").addClass("error");
-			alert("The port number has to be in range 1025 - 99999.\nNothing saved!");
-			return;
-		}
-
-		options.settings["port"] = portNumber.toString();
-		$("#port").closest(".control-group").removeClass("error").addClass("success");
-		setTimeout(function() {$("#port").closest(".control-group").removeClass("success")}, 2500);
-
-		localStorage.settings = JSON.stringify(options.settings);
-
-		chrome.extension.sendMessage({
-			action: 'load_settings'
-		});
-	});
-
-	$("#hostnameButton").click(function() {
-		var hostname = $("#hostname").val();
-		if($.trim(hostname) == "") {
-			$("#hostname").closest(".control-group").addClass("error");
-			alert("Hostname cannot be empty.\nNothing saved!");
-			return;
-		}
-
-		options.settings["hostname"] = hostname;
-		$("#hostname").closest(".control-group").removeClass("error").addClass("success");
-		setTimeout(function() {$("#hostname").closest(".control-group").removeClass("success")}, 2500);
-
-		localStorage.settings = JSON.stringify(options.settings);
-
-		chrome.extension.sendMessage({
-			action: 'load_settings'
-		});
+			action: "check_update_chromeipass"
+		}, options.showMooltipassVersions);
 	});
 };
 
-options.showKeePassHttpVersions = function(response) {
-	if(response.current <= 0) {
-		response.current = "unknown";
-	}
-	if(response.latest <= 0) {
-		response.latest = "unknown";
-	}
-	$("#tab-general-settings .kphVersion:first em.yourVersion:first").text(response.current);
-	$("#tab-general-settings .kphVersion:first em.latestVersion:first").text(response.latest);
+options.initMooltipassSettings = function() {
+	$("#tab-mooltipass-settings input[type=checkbox]").each(function() {
+		$(this).attr("checked", options.settings[$(this).attr("name")]);
+	});
 
-	$("#tab-about em.versionKPH").text(response.current);
+	$("#tab-mooltipass-settings input[type=checkbox]").change(function() {
+		options.settings[$(this).attr("name")] = $(this).is(':checked');
+		localStorage.settings = JSON.stringify(options.settings);
 
-	$("#tab-general-settings button.checkUpdateKeePassHttp:first").attr("disabled", false);
+        chrome.extension.sendMessage({
+            action: 'load_settings'
+        });
+	});
+
+	$("#tab-mooltipass-settings input[type=radio]").each(function() {
+		if($(this).val() == options.settings[$(this).attr("name")]) {
+			$(this).attr("checked", options.settings[$(this).attr("name")]);
+		}
+	});
+
+	$("#tab-mooltipass-settings input[type=radio]").change(function() {
+		options.settings[$(this).attr("name")] = $(this).val();
+		localStorage.settings = JSON.stringify(options.settings);
+
+        chrome.extension.sendMessage({
+            action: 'load_settings'
+        });
+	});
 }
 
-options.initConnectedDatabases = function() {
-	$("#dialogDeleteConnectedDatabase").modal({keyboard: true, show: false, backdrop: true});
-	$("#tab-connected-databases tr.clone:first button.delete:first").click(function(e) {
-		e.preventDefault();
-		$("#dialogDeleteConnectedDatabase").data("hash", $(this).closest("tr").data("hash"));
-		$("#dialogDeleteConnectedDatabase .modal-body:first span:first").text($(this).closest("tr").children("td:first").text());
-		$("#dialogDeleteConnectedDatabase").modal("show");
+options.initBlacklist = function() {
+
+    // get blacklist from storage, or create an empty one if none exists
+    options.blacklist = typeof(localStorage.mpBlacklist)=='undefined' ? {} : JSON.parse(localStorage.mpBlacklist);
+
+	$('#tab-blacklist tr.clone:first button.delete:first').click(function(e) {
+		var url = $(this).closest('tr').data('url');
+		var id = $(this).closest('tr').attr('id');
+		$('#tab-blacklist #' + id).remove();
+		delete options.blacklist[url];
+		localStorage.mpBlacklist = JSON.stringify(options.blacklist);
+        chrome.extension.sendMessage({ action: 'load_settings' });
 	});
 
-	$("#dialogDeleteConnectedDatabase .modal-footer:first button.yes:first").click(function(e) {
-		$("#dialogDeleteConnectedDatabase").modal("hide");
+	var trClone = $("#tab-blacklist table tr.clone:first").clone(true);
+	trClone.removeClass("clone");
 
-		var $hash = $("#dialogDeleteConnectedDatabase").data("hash");
-		$("#tab-connected-databases #tr-cd-" + $hash).remove();
-
-		delete options.keyRing[$hash];
-		localStorage.keyRing = JSON.stringify(options.keyRing);
-
-        chrome.extension.sendMessage({
-            action: 'load_keyring'
-        });
-
-		if($("#tab-connected-databases table tbody:first tr").length > 2) {
-			$("#tab-connected-databases table tbody:first tr.empty:first").hide();
-		}
-		else {
-			$("#tab-connected-databases table tbody:first tr.empty:first").show();
-		}
-	});
-
-	$("#tab-connected-databases tr.clone:first .dropdown-menu:first").width("230px");
-
-	$("#tab-connected-databases tr.clone:first .color.dropdown .dropdown-menu a").click(function(e) {
-		e.preventDefault();
-		var $icon = $(this).attr("href").substring(1);
-		var $hash = $(this).closest("tr").data("hash");
-
-		$(this).parent().parent().find("a.dropdown-toggle:first").find("img:first").attr("src", "/icons/19x19/icon_normal_" + $icon + "_19x19.png");
-
-		options.keyRing[$hash].icon = $icon;
-		localStorage.keyRing = JSON.stringify(options.keyRing);
-        chrome.extension.sendMessage({
-            action: 'load_keyring'
-        });
-	});
-
-	var $trClone = $("#tab-connected-databases table tr.clone:first").clone(true);
-	$trClone.removeClass("clone");
-	for(var hash in options.keyRing) {
-		var $tr = $trClone.clone(true);
-		$tr.data("hash", hash);
-		$tr.attr("id", "tr-cd-" + hash);
-
-		var $icon = options.keyRing[hash].icon || "blue";
-		$("a.dropdown-toggle:first img:first", $tr).attr("src", "/icons/19x19/icon_normal_" + $icon + "_19x19.png");
-
-		$tr.children("td:first").text(options.keyRing[hash].id);
-		var lastUsed = (options.keyRing[hash].lastUsed) ? new Date(options.keyRing[hash].lastUsed).toLocaleString() : "unknown";
-		$tr.children("td:eq(2)").text(lastUsed);
-		var date = (options.keyRing[hash].created) ? new Date(options.keyRing[hash].created).toLocaleDateString() : "unknown";
-		$tr.children("td:eq(3)").text(date);
-		$("#tab-connected-databases table tbody:first").append($tr);
+	var index = 1;
+    for (var url in options.blacklist) {
+		var tr = trClone.clone(true);
+		tr.data('url', url);
+		tr.attr('id', 'tr-scf' + index);
+		tr.children('td:first').text(url);
+		$('#tab-blacklist table tbody:first').append(tr);
+        index++;
 	}
 
-	if($("#tab-connected-databases table tbody:first tr").length > 2) {
-		$("#tab-connected-databases table tbody:first tr.empty:first").hide();
+	if($('#tab-blacklist table tbody:first tr').length > 2) {
+		$('#tab-blacklist table tbody:first tr.empty:first').hide();
 	}
 	else {
-		$("#tab-connected-databases table tbody:first tr.empty:first").show();
+		$('#tab-blacklist table tbody:first tr.empty:first').show();
 	}
+}
+
+options.showMooltipassVersions = function(response) {
+	$("#yourMpVersion").text(response.currentClient);
+	$("#latestMpVersion").text(response.latestClient);
+	$("#yourFwVersion").text(response.currentFirmware);
+	$("#latestFwVersion").text(response.latestFirmware);
+
+	$("#tab-about em.versionMooltipass").text(response.current);
+
+	$("#tab-general-settings button.checkUpdateKeePassHttp:first").attr("disabled", false);
+
+	$("#versionMooltipassFw").text(response.currentFirmware);
+	$("#versionMooltipassClient").text(response.currentClient);
 }
 
 options.initSpecifiedCredentialFields = function() {
@@ -260,4 +203,6 @@ options.initSpecifiedCredentialFields = function() {
 
 options.initAbout = function() {
 	$("#tab-about em.versionCIP").text(chrome.app.getDetails().version);
+	$("#versionMooltipassFw").text('');
+	$("#versionMooltipassClient").text('');
 }
