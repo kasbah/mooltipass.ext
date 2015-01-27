@@ -35,7 +35,7 @@ function mpCheckConnection()
             // Search for the Mooltipass Client
             chrome.management.getAll(getAll);
         } else {
-            chrome.runtime.sendMessage(mpClient.id, { type: 'ping' });
+            chrome.runtime.sendMessage(mpClient.id, { ping: [] });
             setTimeout(mpCheckConnection,500);
         }
     }
@@ -44,17 +44,17 @@ function mpCheckConnection()
 function getAll(ext)
 {
     for (var ind=0; ind<ext.length; ind++) {
-        if (ext[ind].shortName == 'Mooltipass Client') {
+        if (ext[ind].shortName == 'Mooltipass App') {
             mpClient = ext[ind];
             break;
         }
     }
 
     if (mpClient != null) {
-        chrome.runtime.sendMessage(mpClient.id, { type: 'ping' });
-        console.log('found mooltipass client "'+ext[ind].shortName+'" id='+ext[ind].id,' client: ',mpClient);
+        chrome.runtime.sendMessage(mpClient.id, { ping: [] });
+        console.log('found mooltipass app "'+ext[ind].shortName+'" id='+ext[ind].id,' app: ',mpClient);
     } else {
-        console.log('No mooltipass client found');
+        console.log('No mooltipass app found');
     }
 
     setTimeout(mpCheckConnection,500);
@@ -66,7 +66,6 @@ chrome.management.getAll(getAll);
 // Messages from the mooltipass client app
 chrome.runtime.onMessageExternal.addListener(function(message, sender, sendResponse)
 {
-    console.log('back: app req ', message);
     if (message.connectState !== null) {
         if (message.connectState.connected) {
             connected = { version : message.connectState.version };
@@ -136,7 +135,6 @@ mooltipass.isConnected = function()
 mooltipass.updateCredentials = function(callback, tab, entryId, username, password, url) 
 {
     mooltipass.associate();
-	console.log("mp.updateCredentials(})", tab.id, entryId, username, url);
 
     if (mooltipass.isBlacklisted(url)) {
         console.log('notify: ignoring blacklisted url',url);
@@ -151,12 +149,7 @@ mooltipass.updateCredentials = function(callback, tab, entryId, username, passwo
 
     chrome.runtime.sendMessage({type: 'update', url: url, inputs: {login: {id: 0, name: 0, value: username}, password: { id: 1, name: 1, value: password }}});
 
-    request = { type: 'update',
-                url: url, 
-                inputs: {
-                    login: {id: 'login.id', name: 'login.name', value: username},
-                    password: {id: 'pass.id', name: 'pass.name', value: password} } };
-
+    request = {update: {context: toContext(url), login: username, password: password}}
     console.log('sending update to '+mpClient.id);
     contentAddr = tab.id;
     mpUpdateCallback = callback;
@@ -171,7 +164,7 @@ mooltipass.associate = function(callback, tab)
         chrome.management.getAll(getAll);
     } else if (!connected) {
         // try pinging the app
-        chrome.runtime.sendMessage(mpClient.id, { type: 'ping' });
+        chrome.runtime.sendMessage(mpClient.id, { ping: [] });
         console.log('mp.associate() already have client connection, sending ping');
     } else {
         console.log('mp.associate() already connected');
@@ -191,6 +184,11 @@ mooltipass.copyPassword = function(callback, tab)
     console.log('mp.copyPassword()');
 }
 
+toContext = function (url) {
+    // URL regex to extract base domain for context
+    var reContext = /^\https?\:\/\/([\w\-\+]+\.)*([\w\-\_]+\.[\w\-\_]+)/;
+    return reContext.exec(url)[2];
+}
 
 mooltipass.retrieveCredentials = function(callback, tab, url, submiturl, forceCallback, triggerUnlock) 
 {
@@ -210,11 +208,7 @@ mooltipass.retrieveCredentials = function(callback, tab, url, submiturl, forceCa
 		return;
 	}
 
-    request = { type: 'inputs',
-                url: submiturl, 
-                inputs: {
-                    login: {id: 'login.id', name: 'login.name'},
-                    password: {id: 'pass.id', name: 'pass.name'} } };
+    request = { getInputs : {context: toContext(submiturl)} };
 
     console.log('sending to '+mpClient.id);
     contentAddr = tab.id;
