@@ -64,64 +64,41 @@ function getAll(ext)
 chrome.management.getAll(getAll);
 
 // Messages from the mooltipass client app
-chrome.runtime.onMessageExternal.addListener(function(request, sender, sendResponse) 
+chrome.runtime.onMessageExternal.addListener(function(message, sender, sendResponse)
 {
-    console.log('back: app req '+request.type);
-    //console.log('back: app req '+JSON.stringify(request));
-    switch (request.type) {
-        case 'credentials':
-            //chrome.tabs.sendMessage(contentAddr, request);
-            if (mpInputCallback) {
-                mpInputCallback([{Login: request.inputs.login.value, Name: '<name>', Uuid: '<Uuid>', Password: request.inputs.password.value, StringFields: []}]);
-                mpInputCallback = null;
-            }
-            break;
-        case 'noCredentials':
-            // no credentials for site or offered by user
-            if (mpInputCallback) {
-                mpInputCallback([]);
-            }
-            break;
-        case 'updateComplete':
-            if (mpUpdateCallback) {
-                try {
-                    mpUpdateCallback('success');
-                } catch (e) {
-                    console.log("Error: " + e);
-                }
-                mpUpdateCallback = null;
-            }
-            //chrome.tabs.sendMessage(contentAddr, request);
-            break;
-        case 'connected':
-            connected = request;
-            console.log('connected: Mooltipass version "'+request.version+'"');
-            //if (contentAddr) {
-                //chrome.tabs.sendMessage(contentAddr, request);
-            //}
-            break;
-        case 'disconnected':
+    console.log('back: app req ', message);
+    if (message.connectState !== null) {
+        if (message.connectState.connected) {
+            connected = { version : message.connectState.version };
+        }
+        else {
             connected = null;
-            //if (contentAddr) {
-                //chrome.tabs.sendMessage(contentAddr, request);
-            //}
-            break;
-        case 'cardPresent':
-            //if (contentAddr) {
-                //chrome.tabs.sendMessage(contentAddr, request);
-            //}
-            //if (!request.state){
-                //chrome.browserAction.setIcon({path: 'mooltipass-nocard.png'});
-            //}
-            break;
-        case 'rescan':
-            //if (contentAddr) {
-                //chrome.tabs.sendMessage(contentAddr, request);
-            //}
-            break;
-        default:
-            break;
-    }
+        }
+    } else if (message.credentials !== null) {
+        if (mpInputCallback) {
+            mpInputCallback([
+                    { Login: message.credentials.login
+                    , Name: '<name>', Uuid: '<Uuid>'
+                    , Password: message.credentials.password
+                    , StringFields: []
+                    }
+            ]);
+            mpInputCallback = null;
+        }
+   } else if (message.noCredentials !== null) {
+        if (mpInputCallback) {
+            mpInputCallback([]);
+        }
+   } else if (message.updateComplete !== null) {
+        if (mpUpdateCallback) {
+            try {
+                mpUpdateCallback('success');
+            } catch (e) {
+                console.log("Error: " + e);
+            }
+            mpUpdateCallback = null;
+        }
+   }
 });
 
 mooltipass.getFirmwareVersion = function()
