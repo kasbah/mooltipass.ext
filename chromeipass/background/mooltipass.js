@@ -8,7 +8,7 @@ var mpUpdateCallback = null;
 
 mooltipass.latestChromeipassVersionUrl = 'https://raw.githubusercontent.com/limpkin/mooltipass/master/authentication_clients/chromeipass.ext/manifest.json';
 mooltipass.latestClientVersionUrl = 'https://raw.githubusercontent.com/limpkin/mooltipass/master/authentication_clients/chrome.hid-app/manifest.json';
-mooltipass.latestChromeipass = (typeof(localStorage.latestChromeipass) == 'undefined') ? 
+mooltipass.latestChromeipass = (typeof(localStorage.latestChromeipass) == 'undefined') ?
                                 {"version": 0, "versionParsed": 0, "lastChecked": null} :
                                 JSON.parse(localStorage.latestChromeipass);
 
@@ -66,9 +66,9 @@ chrome.management.getAll(getAll);
 // Messages from the mooltipass client app
 chrome.runtime.onMessageExternal.addListener(function(message, sender, sendResponse)
 {
-    if (message.connectState !== null) {
-        if (message.connectState.connected) {
-            connected = { version : message.connectState.version };
+    if (message.deviceStatus !== null) {
+        if (message.deviceStatus.connected) {
+            connected = { version : message.deviceStatus.version };
         }
         else {
             connected = null;
@@ -119,7 +119,7 @@ mooltipass.getClientVersion = function()
     }
 }
 
-mooltipass.addCredentials = function(callback, tab, username, password, url) 
+mooltipass.addCredentials = function(callback, tab, username, password, url)
 {
 	page.tabs[tab.id].errorMessage = null;
     mooltipass.associate();
@@ -132,7 +132,7 @@ mooltipass.isConnected = function()
 }
 
 // needs to block until a response is received.
-mooltipass.updateCredentials = function(callback, tab, entryId, username, password, url) 
+mooltipass.updateCredentials = function(callback, tab, entryId, username, password, url)
 {
     mooltipass.associate();
 
@@ -157,7 +157,7 @@ mooltipass.updateCredentials = function(callback, tab, entryId, username, passwo
 }
 
 
-mooltipass.associate = function(callback, tab) 
+mooltipass.associate = function(callback, tab)
 {
     if (!mpClient) {
         console.log('mp.associate()');
@@ -172,7 +172,7 @@ mooltipass.associate = function(callback, tab)
 }
 
 
-mooltipass.generatePassword = function(callback, tab) 
+mooltipass.generatePassword = function(callback, tab)
 {
 	page.tabs[tab.id].errorMessage = null;
     console.log('mp.generatePassword()');
@@ -190,7 +190,7 @@ toContext = function (url) {
     return reContext.exec(url)[2];
 }
 
-mooltipass.retrieveCredentials = function(callback, tab, url, submiturl, forceCallback, triggerUnlock) 
+mooltipass.retrieveCredentials = function(callback, tab, url, submiturl, forceCallback, triggerUnlock)
 {
     mooltipass.associate();
 	page.debug("mp.retrieveCredentials(callback, {1}, {2}, {3}, {4})", tab.id, url, submiturl, forceCallback);
@@ -216,7 +216,7 @@ mooltipass.retrieveCredentials = function(callback, tab, url, submiturl, forceCa
     chrome.runtime.sendMessage(mpClient.id, request);
 }
 
-mooltipass.getLatestChromeipassVersion = function() 
+mooltipass.getLatestChromeipassVersion = function()
 {
 	var xhr = new XMLHttpRequest();
 	xhr.open("GET", mooltipass.latestChromeipassVersionUrl, false);
@@ -238,7 +238,7 @@ mooltipass.getLatestChromeipassVersion = function()
 	mooltipass.latestChromeipass.lastChecked = new Date();
 }
 
-mooltipass.getLatestClientVersion = function() 
+mooltipass.getLatestClientVersion = function()
 {
 	var xhr = new XMLHttpRequest();
 	xhr.open("GET", mooltipass.latestClientVersionUrl, false);
@@ -269,7 +269,7 @@ mooltipass.isBlacklisted = function(url)
     return url in mooltipass.blacklist;
 }
 
-mooltipass.blacklistUrl = function(url) 
+mooltipass.blacklistUrl = function(url)
 {
     console.log('got blacklist req. for',url);
     mooltipass.blacklist[url] = true;
